@@ -1,0 +1,87 @@
+- hosts: localhost
+
+  vars:
+    crio_version: 1.18
+    cluster_cidr: 10.39.0.0/16 
+    disable: --disable=servicelb --disable=traefik
+    runtime: --container-runtime-endpoint=unix:///run/crio/crio.sock
+
+  tasks:
+
+  - name: Enable cri-o module
+    command:
+      cmd: dnf -y module enable cri-o:{{ crio_version }}
+      warn: false
+
+  - name: Install conntrack-tools container-selinux cri-o iptables-nft selinux-policy-base
+    dnf:
+      name:
+      - conntrack-tools
+      - container-selinux
+      - cri-o
+      - iptables-nft
+      - selinux-policy-base
+      state: latest
+
+  - name: Set crio cgroup_manager
+    lineinfile:
+      path: /etc/crio/crio.conf
+      regex: ^cgroup_manager
+      line: cgroup_manager = "cgroupfs"
+ 
+  - name: Add registries to crio.conf
+    blockinfile:
+      path: /etc/crio/crio.conf
+      block: |
+        registries = [
+          "quay.io",
+          "docker.io"
+        ]
+
+  - name: Install k3s-selinux
+    dnf:
+      name: https://rpm.rancher.io/k3s-selinux-0.1.1-rc1.el7.noarch.rpm
+      disable_gpg_check: true
+      state: present
+
+  - name: Download k3s installation script
+    get_url:
+      url: https://get.k3s.io
+      dest: /tmp/install_k3s.sh
+
+  - name: Set k3s installation script permissions
+    file:
+      path: /tmp/install_k3s.sh
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: Execute k3s installation script
+    command:
+      cmd: /tmp/install_k3s.sh
+    environment:
+      INSTALL_K3S_SKIP_START: true
+      INSTALL_K3S_EXEC: "{{ runtime }} {{ disable }} --flannel-backend=none"
+
+  - name: Add cri-o.service dependency to k3s.service
+    lineinfile:
+      path: /etc/systemd/system/k3s.service
+      regex: ^Wants=
+      line: Wants=cri-o.service
+
+  - name: Link /dev/console to /dev/kmsg at boot
+    lineinfile:
+      path: /etc/systemd/system/k3s.service
+      insertbefore: ^ExecStart=
+      line: ExecStartPre=/usr/bin/ln -sf /dev/console /dev/kmsg
+ 
+  - name: Remove modprobe from k3s.service
+    lineinfile:
+      path: /etc/systemd/system/k3s.service
+      regex: modprobe
+      state: absent
+ 
+  - name: Remove k3s installation script
+    file:
+      path: /tmp/install_k3s.sh
+      state: absent
