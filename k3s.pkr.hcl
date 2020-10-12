@@ -2,7 +2,7 @@ source "lxd" "k3s" {
   image = "fedora/32/ansible"
   profile = "k3s"
   output_image = "fedora/32/k3s"
-  
+
   publish_properties = {
     description = "Fedora based k3s"
   }

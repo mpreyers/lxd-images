@@ -2,7 +2,7 @@
 
   vars:
     crio_version: 1.18
-    cluster_cidr: 10.39.0.0/16 
+    cluster_cidr: 192.168.0.0/16
     disable: --disable=servicelb --disable=traefik
     runtime: --container-runtime-endpoint=unix:///run/crio/crio.sock
 
@@ -28,7 +28,7 @@
       path: /etc/crio/crio.conf
       regex: ^cgroup_manager
       line: cgroup_manager = "cgroupfs"
- 
+
   - name: Add registries to crio.conf
     blockinfile:
       path: /etc/crio/crio.conf
@@ -61,7 +61,7 @@
       cmd: /tmp/install_k3s.sh
     environment:
       INSTALL_K3S_SKIP_START: true
-      INSTALL_K3S_EXEC: "{{ runtime }} {{ disable }} --flannel-backend=none"
+      INSTALL_K3S_EXEC: "{{ runtime }} {{ disable }} --cluster-cidr={{ cluster_cidr }} --flannel-backend=none"
 
   - name: Add cri-o.service dependency to k3s.service
     lineinfile:
@@ -74,13 +74,13 @@
       path: /etc/systemd/system/k3s.service
       insertbefore: ^ExecStart=
       line: ExecStartPre=/usr/bin/ln -sf /dev/console /dev/kmsg
- 
+
   - name: Remove modprobe from k3s.service
     lineinfile:
       path: /etc/systemd/system/k3s.service
       regex: modprobe
       state: absent
- 
+
   - name: Remove k3s installation script
     file:
       path: /tmp/install_k3s.sh
