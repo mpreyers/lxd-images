@@ -13,7 +13,7 @@ build {
 
   provisioner "shell" {
     inline = [
-      "dnf -y install ansible",
+      "dnf -y install ansible microdnf",
       "mkdir /tmp/packer-ansible"
     ]
   }

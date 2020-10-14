@@ -2,9 +2,9 @@
 
   vars:
     crio_version: 1.18
-    cluster_cidr: 192.168.0.0/16
     disable: --disable=servicelb --disable=traefik
     runtime: --container-runtime-endpoint=unix:///run/crio/crio.sock
+    storage: /data
 
   tasks:
 
@@ -13,10 +13,9 @@
       cmd: dnf -y module enable cri-o:{{ crio_version }}
       warn: false
 
-  - name: Install conntrack-tools container-selinux cri-o iptables-nft selinux-policy-base
+  - name: Install container-selinux cri-o iptables-nft selinux-policy-base
     dnf:
       name:
-      - conntrack-tools
       - container-selinux
       - cri-o
       - iptables-nft
@@ -29,6 +28,12 @@
       regex: ^cgroup_manager
       line: cgroup_manager = "cgroupfs"
 
+  - name: Set containers storage_driver
+    lineinfile:
+      path: /etc/containers/storage.conf
+      regex: ^storage_driver
+      line: storage_driver = "btrfs"
+
   - name: Add registries to crio.conf
     blockinfile:
       path: /etc/crio/crio.conf
@@ -37,6 +42,20 @@
           "quay.io",
           "docker.io"
         ]
+
+  - name: Add network_dir to crio.conf
+    lineinfile:
+      path: /etc/crio/crio.conf
+      regex: ^network_dir
+      line: network_dir = "/var/lib/rancher/k3s/agent/etc/cni/net.d/"
+  
+  - name: Make storage directory
+    file:
+      path: "{{ storage }}"
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
 
   - name: Install k3s-selinux
     dnf:
@@ -57,11 +76,11 @@
       mode: '0755'
 
   - name: Execute k3s installation script
-    command:
+    shell:
       cmd: /tmp/install_k3s.sh
     environment:
-      INSTALL_K3S_SKIP_START: true
-      INSTALL_K3S_EXEC: "{{ runtime }} {{ disable }} --cluster-cidr={{ cluster_cidr }} --flannel-backend=none"
+      INSTALL_K3S_SKIP_START: "true"
+      INSTALL_K3S_EXEC: "{{ runtime }} {{ disable }} --default-local-storage-path={{ storage }}"
 
   - name: Add cri-o.service dependency to k3s.service
     lineinfile:
@@ -85,3 +104,8 @@
     file:
       path: /tmp/install_k3s.sh
       state: absent
+
+  - name: Disable dbus-broker
+    systemd:
+      name: dbus-broker
+      enabled: false
