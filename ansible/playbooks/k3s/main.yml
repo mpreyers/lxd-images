@@ -2,7 +2,9 @@
 
   vars:
     crio_version: 1.18
-    disable: --disable=servicelb --disable=traefik
+    apiserver: --kube-apiserver-arg=feature-gates=LocalStorageCapacityIsolation=false
+    disable: --flannel-backend=none --disable=servicelb --disable=traefik
+    datastore: --datastore-endpoint=postgres://${K3DB_USER}:${K3DB_PASSWORD}@localhost/${K3DB_DATABASE}?sslmode=disable
     runtime: --container-runtime-endpoint=unix:///run/crio/crio.sock
     storage: /data
 
@@ -13,12 +15,13 @@
       cmd: dnf -y module enable cri-o:{{ crio_version }}
       warn: false
 
-  - name: Install container-selinux cri-o iptables-nft selinux-policy-base
+  - name: Install requirements
     dnf:
       name:
       - container-selinux
       - cri-o
       - iptables-nft
+      - postgresql-server
       - selinux-policy-base
       state: latest
 
@@ -39,7 +42,6 @@
       path: /etc/crio/crio.conf
       block: |
         registries = [
-          "quay.io",
           "docker.io"
         ]
 
@@ -48,7 +50,7 @@
       path: /etc/crio/crio.conf
       regex: ^network_dir
       line: network_dir = "/var/lib/rancher/k3s/agent/etc/cni/net.d/"
-  
+
   - name: Make storage directory
     file:
       path: "{{ storage }}"
@@ -56,6 +58,50 @@
       owner: root
       group: root
       mode: '0755'
+
+  - name: Add script k3ckstart.sh
+    copy:
+      dest: /usr/local/sbin/k3ckstart.sh
+      src: files/k3ckstart.sh
+      owner: root
+      group: root
+      mode: 0750
+
+  - name: Add k3ckstart.service
+    copy:
+      dest: /etc/systemd/system/k3ckstart.service
+      src: files/k3ckstart.service
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Add postgresql-setup.sh
+    copy:
+      dest: /usr/local/bin/postgresql-setup.sh
+      src: files/postgresql-setup.sh
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Add postgresql-setup.service
+    copy:
+      dest: /etc/systemd/system/postgresql-setup.service
+      src: files/postgresql-setup.service
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Enable postgresql-setup.service
+    file:
+      src: /etc/systemd/system/postgresql-setup.service
+      dest: /etc/systemd/system/multi-user.target.wants/postgresql-setup.service
+      state: link
+
+  - name: Enable postgresql.service
+    file:
+      src: /usr/lib/systemd/system/postgresql.service
+      dest: /etc/systemd/system/multi-user.target.wants/postgresql.service
+      state: link
 
   - name: Install k3s-selinux
     dnf:
@@ -80,19 +126,19 @@
       cmd: /tmp/install_k3s.sh
     environment:
       INSTALL_K3S_SKIP_START: "true"
-      INSTALL_K3S_EXEC: "{{ runtime }} {{ disable }} --default-local-storage-path={{ storage }}"
+      INSTALL_K3S_EXEC: "{{ apiserver }} {{ datastore }} {{ runtime }} {{ disable }} --default-local-storage-path={{ storage }}"
 
-  - name: Add cri-o.service dependency to k3s.service
+  - name: Add cri-o/postgresql dependency to k3s.service
     lineinfile:
       path: /etc/systemd/system/k3s.service
       regex: ^Wants=
-      line: Wants=cri-o.service
+      line: Requires=cri-o.service k3ckstart.service postgresql.service
 
-  - name: Link /dev/console to /dev/kmsg at boot
+  - name: Allow vars in k3s.service
     lineinfile:
       path: /etc/systemd/system/k3s.service
-      insertbefore: ^ExecStart=
-      line: ExecStartPre=/usr/bin/ln -sf /dev/console /dev/kmsg
+      regex: --datastore-endpoint
+      line: '        "{{ datastore }}" \'
 
   - name: Remove modprobe from k3s.service
     lineinfile:
@@ -105,7 +151,10 @@
       path: /tmp/install_k3s.sh
       state: absent
 
-  - name: Disable dbus-broker
-    systemd:
-      name: dbus-broker
-      enabled: false
+  - name: mkdir /var/lib/rancher/k3s/server/manifests
+    file:
+      path: /var/lib/rancher/k3s/server/manifests
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'

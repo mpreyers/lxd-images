@@ -1,0 +1,12 @@
+[Unit]
+Description=k3ckstart
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/sbin/k3ckstart.sh
+RemainAfterExit=no
+Restart=no
+StandardOutput=journal

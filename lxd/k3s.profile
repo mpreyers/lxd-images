@@ -19,7 +19,3 @@ devices:
     path: /
     pool: default
     type: disk
-  btrfspooldev:
-    type: unix-block
-    source: /dev/root
-    path: /dev/root
