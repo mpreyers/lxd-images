@@ -10,46 +10,17 @@
 
   tasks:
 
-  - name: Enable cri-o module
-    command:
-      cmd: dnf -y module enable cri-o:{{ crio_version }}
-      warn: false
-
   - name: Install requirements
     dnf:
       name:
       - container-selinux
-      - cri-o
-      - iptables-nft
+      - iptables
       - postgresql-server
       - selinux-policy-base
       state: latest
 
-  - name: Set crio cgroup_manager
-    lineinfile:
-      path: /etc/crio/crio.conf
-      regex: ^cgroup_manager
-      line: cgroup_manager = "cgroupfs"
-
-  - name: Set containers storage_driver
-    lineinfile:
-      path: /etc/containers/storage.conf
-      regex: ^storage_driver
-      line: storage_driver = "btrfs"
-
-  - name: Add registries to crio.conf
-    blockinfile:
-      path: /etc/crio/crio.conf
-      block: |
-        registries = [
-          "docker.io"
-        ]
-
-  - name: Add network_dir to crio.conf
-    lineinfile:
-      path: /etc/crio/crio.conf
-      regex: ^network_dir
-      line: network_dir = "/var/lib/rancher/k3s/agent/etc/cni/net.d/"
+  - name: Install cri-o
+    include_tasks: install-crio.yml
 
   - name: Make storage directory
     file:
@@ -62,7 +33,7 @@
   - name: Add script k3ckstart.sh
     copy:
       dest: /usr/local/sbin/k3ckstart.sh
-      src: files/k3ckstart.sh
+      src: files/sbin/k3ckstart.sh
       owner: root
       group: root
       mode: 0750
@@ -70,7 +41,7 @@
   - name: Add k3ckstart.service
     copy:
       dest: /etc/systemd/system/k3ckstart.service
-      src: files/k3ckstart.service
+      src: files/systemd/k3ckstart.service
       owner: root
       group: root
       mode: 0644
@@ -78,7 +49,7 @@
   - name: Add postgresql-setup.sh
     copy:
       dest: /usr/local/bin/postgresql-setup.sh
-      src: files/postgresql-setup.sh
+      src: files/bin/postgresql-setup.sh
       owner: root
       group: root
       mode: 0755
@@ -86,7 +57,7 @@
   - name: Add postgresql-setup.service
     copy:
       dest: /etc/systemd/system/postgresql-setup.service
-      src: files/postgresql-setup.service
+      src: files/systemd/postgresql-setup.service
       owner: root
       group: root
       mode: 0644
@@ -158,3 +129,11 @@
       owner: root
       group: root
       mode: '0755'
+
+  - name: Add helmchart-cilium.yaml
+    copy:
+      dest: /var/lib/rancher/k3s/server/manifests/helmchart-cilium.yaml
+      src: files/k3s/manifests/helmchart-cilium.yaml
+      owner: root
+      group: root
+      mode: 0644

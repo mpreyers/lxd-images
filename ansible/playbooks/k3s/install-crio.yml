@@ -1,0 +1,68 @@
+- name: dnf - add module cri-o
+  command:
+    cmd: dnf -y module enable cri-o:{{ crio_version }}
+    warn: false
+
+- name: dnf - install cri-o
+  dnf:
+    name: cri-o
+    state: latest
+
+- name: crio.conf - set cgroup_manager
+  lineinfile:
+    path: /etc/crio/crio.conf
+    regex: ^cgroup_manager
+    line: cgroup_manager = "cgroupfs"
+
+- name: crio.conf - set network_dir
+  lineinfile:
+    path: /etc/crio/crio.conf
+    regex: ^network_dir
+    line: network_dir = "/etc/cni/net.d/"
+
+- name: crio.conf - add docker.io registry
+  blockinfile:
+    path: /etc/crio/crio.conf
+    insertafter: ^image_volumes
+    block: |
+      registries = [
+        "docker.io"
+      ]
+
+- name: cni/net.d/ - add 05-cilium.conf
+  copy:
+    dest: /etc/cni/net.d/05-cilium.conf
+    src: files/cni/net.d/05-cilium.conf
+    owner: root
+    group: root
+    mode: 0644
+
+- name: cni/net.d/ - add 100-crio-bridge.conf
+  copy:
+    dest: /etc/cni/net.d/100-crio-bridge.conf
+    src: files/cni/net.d/100-crio-bridge.conf
+    owner: root
+    group: root
+    mode: 0644
+
+- name: local/sbin/ - add containers-storage-setup.sh
+  copy:
+    dest: /usr/local/sbin/containers-storage-setup.sh
+    src: files/sbin/containers-storage-setup.sh
+    owner: root
+    group: root
+    mode: 0750
+
+- name: systemd/system/ - add containers-storage-setup.service
+  copy:
+    dest: /etc/systemd/system/containers-storage-setup.service
+    src: files/systemd/containers-storage-setup.service
+    owner: root
+    group: root
+    mode: 0644
+
+- name: systemd/system/ - enable containers-storage-setup.service
+  file:
+    src: /etc/systemd/system/containers-storage-setup.service
+    dest: /etc/systemd/system/multi-user.target.wants/containers-storage-setup.service
+    state: link

@@ -1,0 +1,14 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cilium
+  namespace: kube-system
+spec:
+  bootstrap: True
+  chart: cilium
+  repo: https://helm.cilium.io/
+  version: 1.8.4
+  targetNamespace: kube-system
+  valuesContent: |-
+    operator:
+      numReplicas: 1

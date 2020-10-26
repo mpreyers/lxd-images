@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
 # Link /dev/kmsq
-ln -sf /dev/console /dev/kmsg
+if [[ ! -f /dev/kmsg ]]; then
+  ln -sf /dev/console /dev/kmsg
+fi
 
+# Prepare postgresql
 if grep ^Success /var/lib/pgsql/initdb_postgresql.log; then
 
   _rand() {
